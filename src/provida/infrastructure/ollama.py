@@ -17,10 +17,26 @@ class OllamaClient:
         )
 
     def chat(self, message, history):
-        messages = [{"role": role, "content": text} for role, text in history]
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are PROVIDA, a private local-first Windows desktop voice assistant. "
+                    "Reply concisely in English. Never claim that you performed a tool action "
+                    "unless the application reports it. Never provide or execute shell commands "
+                    "as actions. Ask for confirmation before destructive or account-changing work."
+                ),
+            }
+        ]
+        messages.extend({"role": role, "content": text} for role, text in history)
         messages.append({"role": "user", "content": message})
         body = json.dumps(
-            {"model": self.config.ollama_model, "messages": messages, "stream": False}
+            {
+                "model": self.config.ollama_model,
+                "messages": messages,
+                "stream": False,
+                "think": False,
+            }
         ).encode()
         request = Request(
             self.config.ollama_endpoint + "/api/chat",
@@ -29,7 +45,7 @@ class OllamaClient:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=30) as response:
+            with urlopen(request, timeout=120) as response:
                 payload = json.load(response)
         except (OSError, URLError, ValueError) as exc:
             raise RuntimeError(

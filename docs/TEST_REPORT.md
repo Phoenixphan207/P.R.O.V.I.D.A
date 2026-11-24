@@ -19,3 +19,11 @@ Date: 2026-11-24
 - Packaged executable exit code: 0; bundled Vosk model and SQLite database verified; screenshot visually inspected.
 - Optional Ollama: fake-provider response and asynchronous unavailable/error recovery passed. Ollama is not installed on this machine, so no real model inference is claimed.
 - Codex: installed CLI version and `app-server` capability detected read-only. No coding action or approval bypass was attempted.
+
+## Release 1.1.1 Ollama verification
+
+- Ollama 0.40.17 detected with installed models `qwen3.5:4b` and `ministral-3:8b`.
+- Direct `/api/chat` inference returned the exact requested readiness phrase.
+- PROVIDA `Service.command` inference with `qwen3.5:4b` returned a grounded English description of PROVIDA.
+- A real 30-second timeout was reproduced with conversation memory, then fixed using background execution, `think: false`, a 120-second provider timeout and a fixed identity/safety system message.
+- Final automated result after the fix: 19 passed; Ruff and compilation passed.

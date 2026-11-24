@@ -30,3 +30,5 @@ Measured limitation: a speaker-to-microphone loopback attempt did not trigger wa
 - [x] Complete final release 1.1 tests, packaged smoke and visual inspection.
 
 Release 1.1.0 result: 19 automated tests passed, lint/compile passed, nine native smoke flows passed, packaged EXE exited 0, the bundled Vosk model and SQLite database were verified, and the rendered packaged UI was visually inspected. Ollama is not installed on this machine; its provider contract and non-blocking failure path are tested, but a real model response is not claimed.
+
+Release 1.1.1 Ollama verification: Ollama 0.40.17 and `qwen3.5:4b` were detected. Direct API and `Service.command` inference passed. The provider disables extended thinking, allows a 120-second background timeout, and grounds the model with PROVIDA's identity and safety policy.
