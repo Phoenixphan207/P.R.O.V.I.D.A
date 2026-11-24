@@ -10,8 +10,8 @@ if (-not (Test-Path (Join-Path $model "conf"))) {
 }
 $python = Join-Path $root ".venv\Scripts\python.exe"
 & $python -m PyInstaller --noconfirm --clean --windowed --name PROVIDA `
-    --distpath (Join-Path $root "dist\release-1.0.0") `
-    --workpath (Join-Path $root "build\release-1.0.0") `
+    --distpath (Join-Path $root "dist\release-1.1.0") `
+    --workpath (Join-Path $root "build\release-1.1.0") `
     --paths (Join-Path $root "src") `
     --add-data "$model;models\vosk-model-small-en-us-0.15" `
     --collect-all vosk `

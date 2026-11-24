@@ -15,5 +15,8 @@ Measured on Windows 11 x64, 2026-11-24.
 | Packaged model | Verified | Release contains Vosk model configuration and packaged app exits smoke with code 0 |
 | Clean shutdown | Verified | Hardware acceptance released microphone; source and packaged smoke exited cleanly |
 | General LLM conversation | Not included | Honest limited local mode |
+| Local conversation memory | Verified | Packaged SQLite creation, bounded history and two-step deletion confirmation |
+| Optional Ollama conversation | Integration verified; real model unavailable | Fake-provider response and asynchronous unavailable path passed; Ollama is not installed on the measured machine |
+| Codex integration | Read-only discovery verified | Packaged smoke detected Codex CLI 0.171.0-alpha.13 and app-server capability; no coding action is started |
 
 Automated tests never enable or capture microphone audio. Hardware checks are separate manual acceptance scripts.

@@ -8,7 +8,12 @@ from pathlib import Path
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+from provida.application.service import Service
+from provida.infrastructure.codex_bridge import CodexBridge
+from provida.infrastructure.config import ConfigStore, data_dir
 from provida.infrastructure.logging_setup import configure_logging
+from provida.infrastructure.memory import ConversationMemory
+from provida.infrastructure.ollama import OllamaClient
 from provida.presentation.assistant_window import AssistantWindow
 
 
@@ -47,6 +52,10 @@ def run_smoke(window, screenshot: Path):
         ("Wake up, JARVIS", "Hello, sir."),
         ("Open YouTube", "Opening YouTube."),
         ("open http://example.com", "Only HTTPS websites"),
+        ("codex status", "Codex CLI is available"),
+        ("what do you remember", "Recent requests:"),
+        ("forget conversation", "confirm forget conversation"),
+        ("confirm forget conversation", "history has been deleted"),
         ("sleep", "Going to sleep"),
     ]:
         window.text_input.setText(command)
@@ -68,6 +77,19 @@ def run_smoke(window, screenshot: Path):
     return 0 if result["all_checks_passed"] and opened == ["https://www.youtube.com"] else 2
 
 
+def build_service():
+    store = ConfigStore()
+    config = store.load()
+    memory = ConversationMemory(data_dir() / "conversation.db") if config.memory_enabled else None
+    return Service(
+        memory=memory,
+        llm=OllamaClient(config),
+        codex=CodexBridge(),
+        config=config,
+        config_store=store,
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", action="store_true")
@@ -77,13 +99,14 @@ def main(argv=None):
     app = QApplication.instance() or QApplication(sys.argv)
     if args.smoke_test:
         window = AssistantWindow(
+            service=build_service(),
             speech=SmokeSpeech(), voice_input=SmokeVoice(), speak_responses=False
         )
         window.show()
         code = run_smoke(window, Path(args.screenshot).resolve())
         window.close()
         return code
-    window = AssistantWindow()
+    window = AssistantWindow(service=build_service())
     window.show()
     return app.exec()
 

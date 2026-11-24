@@ -2,6 +2,7 @@
 
 import html
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import ClassVar
 
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from provida.application.service import Service
 from provida.domain.assistant import LocalAssistant
 from provida.infrastructure.browser import BrowserService
 from provida.infrastructure.voice_input import VoiceInput
@@ -61,18 +63,22 @@ class AssistantWindow(QMainWindow):
     def __init__(
         self,
         engine=None,
+        service=None,
         browser=None,
         speech=None,
         voice_input=None,
         speak_responses=True,
     ):
         super().__init__()
-        self.engine = engine or LocalAssistant()
+        self.service = service or Service(local=engine or LocalAssistant())
+        self.engine = self.service
         self.browser = browser or BrowserService()
         self.speech = speech or Speech()
         self.voice = voice_input or VoiceInput()
         self.speak_responses = speak_responses
         self.pending_command_after_wake = False
+        self.command_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="provida-command")
+        self.command_future = None
         self.setWindowTitle("PROVIDA — Desktop Voice Assistant")
         self.resize(1050, 760)
         self.setMinimumSize(820, 620)
@@ -96,7 +102,8 @@ class AssistantWindow(QMainWindow):
         identity.addWidget(QLabel("Private, local-first desktop voice assistant"))
         top.addLayout(identity)
         top.addStretch()
-        self.mode_label = QLabel("LIMITED LOCAL MODE")
+        llm_enabled = bool(self.service.llm and self.service.llm.enabled)
+        self.mode_label = QLabel("OLLAMA LOCAL MODE" if llm_enabled else "LIMITED LOCAL MODE")
         self.mode_label.setStyleSheet(
             "background:#362d59;color:#d8c8ff;padding:8px 12px;border-radius:10px"
         )
@@ -165,7 +172,7 @@ class AssistantWindow(QMainWindow):
         input_row.addWidget(self.send_button)
         conversation_layout.addLayout(input_row)
         self.help_label = QLabel(
-            "Try: “Wake up, JARVIS” · “Open YouTube” · “Open example.com” · “What time is it?” · “Sleep”"
+            "Try: “Wake up, JARVIS” · “Open YouTube” · “Codex status” · “What do you remember” · “System status”"
         )
         self.help_label.setWordWrap(True)
         self.help_label.setStyleSheet("color:#8da3bf")
@@ -194,6 +201,28 @@ class AssistantWindow(QMainWindow):
         model_button.clicked.connect(self.select_model)
         settings_layout.addWidget(model_button)
         outer.addWidget(settings)
+
+        intelligence = QFrame()
+        intelligence.setObjectName("panel")
+        intelligence_layout = QHBoxLayout(intelligence)
+        self.ollama_toggle = QCheckBox("Use local Ollama")
+        self.ollama_toggle.setChecked(llm_enabled)
+        self.ollama_toggle.setEnabled(self.service.config is not None)
+        intelligence_layout.addWidget(self.ollama_toggle)
+        self.ollama_model = QLineEdit()
+        self.ollama_model.setPlaceholderText("Ollama model, e.g. qwen2.5:3b")
+        if self.service.config:
+            self.ollama_model.setText(self.service.config.ollama_model)
+        self.ollama_model.setEnabled(self.service.config is not None)
+        intelligence_layout.addWidget(self.ollama_model, 1)
+        save_ai = QPushButton("Save AI settings")
+        save_ai.setEnabled(self.service.config_store is not None)
+        save_ai.clicked.connect(self.save_ai_settings)
+        intelligence_layout.addWidget(save_ai)
+        codex_text = self.service.codex.status() if self.service.codex else "Codex unavailable"
+        self.codex_label = QLabel("Codex: ready" if "available" in codex_text else "Codex: unavailable")
+        intelligence_layout.addWidget(self.codex_label)
+        outer.addWidget(intelligence)
 
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self.poll_workers)
@@ -240,18 +269,46 @@ class AssistantWindow(QMainWindow):
             self.append_user(text)
         self.set_state("thinking", "Processing locally…")
         try:
-            reply = self.engine.handle(text)
-            self.append_assistant(reply.text)
-            if reply.url and not self.browser.open(reply.url):
-                raise RuntimeError("The default browser did not accept the request.")
-            if self.speak_responses:
-                self.speech.speak(reply.text, self.volume.value())
-                self.set_state("speaking", "Speaking an English response…")
-            else:
-                self.set_state(reply.state, reply.text)
+            if self.service.llm and self.service.llm.enabled:
+                if self.command_future and not self.command_future.done():
+                    self.set_state("error", "Wait for the current response to finish.")
+                    return
+                self.send_button.setEnabled(False)
+                self.command_future = self.command_pool.submit(self.service.command, text)
+                return
+            self.complete_reply(self.service.command(text))
         except Exception as exc:
             LOGGER.exception("Assistant request failed")
             self.append_assistant(f"I could not complete that request: {exc}")
+            self.set_state("error", str(exc))
+
+    def complete_reply(self, reply):
+        self.append_assistant(reply.text)
+        if reply.url and not self.browser.open(reply.url):
+            raise RuntimeError("The default browser did not accept the request.")
+        if self.speak_responses:
+            self.speech.speak(reply.text, self.volume.value())
+            self.set_state("speaking", "Speaking an English response…")
+        else:
+            self.set_state(reply.state, reply.text)
+
+    def save_ai_settings(self):
+        config = self.service.config
+        if not config or not self.service.config_store:
+            return
+        model = self.ollama_model.text().strip()
+        if not model or len(model) > 100:
+            self.set_state("error", "Enter a valid local Ollama model name.")
+            return
+        config.ollama_enabled = self.ollama_toggle.isChecked()
+        config.ollama_model = model
+        try:
+            self.service.config_store.save(config)
+            self.mode_label.setText(
+                "OLLAMA LOCAL MODE" if config.ollama_enabled else "LIMITED LOCAL MODE"
+            )
+            self.set_state("sleeping", "AI settings saved. No credentials were stored.")
+        except ValueError as exc:
             self.set_state("error", str(exc))
 
     def enable_wake_word(self):
@@ -280,6 +337,16 @@ class AssistantWindow(QMainWindow):
         self.set_state("sleeping", "Microphone stopped. Text input remains available.")
 
     def poll_workers(self):
+        if self.command_future and self.command_future.done():
+            future = self.command_future
+            self.command_future = None
+            self.send_button.setEnabled(True)
+            try:
+                self.complete_reply(future.result())
+            except Exception as exc:
+                LOGGER.exception("Assistant request failed")
+                self.append_assistant(f"I could not complete that request: {exc}")
+                self.set_state("error", str(exc))
         while not self.voice.results.empty():
             result = self.voice.results.get_nowait()
             if result["kind"] == "error":
@@ -316,8 +383,8 @@ class AssistantWindow(QMainWindow):
                 self.set_state("error", "Speech output is unavailable; text mode still works.")
                 return
             self.set_state(
-                "listening" if self.engine.active else "sleeping",
-                "Ready for your next command." if self.engine.active else "Text input is ready.",
+                "listening" if self.service.active else "sleeping",
+                "Ready for your next command." if self.service.active else "Text input is ready.",
             )
 
     def select_model(self):
@@ -337,4 +404,5 @@ class AssistantWindow(QMainWindow):
         self.poll_timer.stop()
         self.voice.stop()
         self.speech.close()
+        self.command_pool.shutdown(wait=False, cancel_futures=True)
         event.accept()
