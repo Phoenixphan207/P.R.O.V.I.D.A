@@ -1,4 +1,4 @@
-# PROVIDA Phase 1 build status
+# PROVIDA build status
 
 Updated: 2026-11-24
 
@@ -17,3 +17,18 @@ Updated: 2026-11-24
 - [x] Build release 1.0.0 with bundled model and pass packaged native UI smoke.
 
 Measured limitation: a speaker-to-microphone loopback attempt did not trigger wake detection, likely due to laptop echo cancellation. Live recognition of a human saying the phrase remains user-environment dependent; text and push-to-talk fallback are functional.
+
+## Release 1.1 integration
+
+- [x] Preserve Phase 1 on `codex/phase1-backup` and pass the baseline smoke test.
+- [x] Route UI and voice commands through the application `Service.command` boundary.
+- [x] Add bounded SQLite conversation memory and confirmed deletion.
+- [x] Add optional loopback-only Ollama chat with honest unavailable errors and background execution.
+- [x] Detect installed Codex CLI and app-server without launching coding actions.
+- [x] Add local AI settings and visible Codex/mode status to the desktop UI.
+- [x] Document design references and dependency/license decisions.
+- [x] Complete final release 1.1 tests, packaged smoke and visual inspection.
+
+Release 1.1.0 result: 19 automated tests passed, lint/compile passed, nine native smoke flows passed, packaged EXE exited 0, the bundled Vosk model and SQLite database were verified, and the rendered packaged UI was visually inspected. Ollama is not installed on this machine; its provider contract and non-blocking failure path are tested, but a real model response is not claimed.
+
+Release 1.1.1 Ollama verification: Ollama 0.40.17 and `qwen3.5:4b` were detected. Direct API and `Service.command` inference passed. The provider disables extended thinking, allows a 120-second background timeout, and grounds the model with PROVIDA's identity and safety policy.

@@ -2,6 +2,8 @@ import queue
 
 from PySide6.QtCore import Qt
 
+from provida.application.service import Service
+from provida.infrastructure.config import AppConfig
 from provida.presentation.assistant_window import AssistantWindow
 
 
@@ -86,3 +88,40 @@ def test_microphone_controls_are_explicit(qtbot):
     qtbot.mouseClick(window.stop_button, Qt.MouseButton.LeftButton)
     assert not voice.running
     assert window.state_label.text() == "SLEEPING"
+
+
+class FailingLlm:
+    enabled = True
+
+    def chat(self, message, history):
+        raise RuntimeError("The local Ollama service is unavailable.")
+
+
+class FakeConfigStore:
+    def __init__(self):
+        self.saved = None
+
+    def save(self, config):
+        self.saved = config
+
+
+def test_ollama_failure_is_async_and_settings_save(qtbot):
+    config = AppConfig(ollama_enabled=True)
+    store = FakeConfigStore()
+    service = Service(llm=FailingLlm(), config=config, config_store=store)
+    window = AssistantWindow(
+        service=service,
+        browser=FakeBrowser(),
+        speech=FakeSpeech(),
+        voice_input=FakeVoice(),
+        speak_responses=False,
+    )
+    qtbot.addWidget(window)
+    window.show()
+    send(qtbot, window, "explain recursion")
+    assert not window.send_button.isEnabled()
+    qtbot.waitUntil(window.send_button.isEnabled, timeout=2000)
+    assert "Ollama service is unavailable" in window.transcript.toPlainText()
+    window.ollama_model.setText("qwen-test")
+    window.save_ai_settings()
+    assert store.saved.ollama_model == "qwen-test"

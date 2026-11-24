@@ -13,6 +13,7 @@ class AssistantReply:
     text: str
     state: str = "sleeping"
     url: str | None = None
+    source: str = "local"
 
 
 def normalize_url(value: str) -> str:
@@ -84,4 +85,5 @@ class LocalAssistant:
             "I am running in limited local mode, so I cannot answer that yet. "
             "Try ‘help’, ‘open YouTube’, ‘open example.com’, ‘time’, or ‘date’.",
             "speaking",
+            source="limited",
         )
